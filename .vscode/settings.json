@@ -6,5 +6,9 @@
   "search.exclude": {
     "out": false
   },
-  "typescript.tsc.autoDetect": "off"
+  "typescript.tsc.autoDetect": "off",
+  "cSpell.words": [
+    "GETPIN",
+    "pinentry"
+  ]
 }
