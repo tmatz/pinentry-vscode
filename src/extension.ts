@@ -25,37 +25,27 @@ function parseCommand(line: string): [
 	return [m[1], m[3] ?? ''];
 }
 
-interface AssuanResponse {
-	ok(): void;
-	err(message?: string): void;
-	d(data: string): void;
-	end(): void;
-	comment(message: string): void;
-}
-
-class AssuanResponseImpl implements AssuanResponse {
-	#socket: net.Socket;
-	constructor(socket: net.Socket) {
-		this.#socket = socket;
-	}
-	ok(): void {
-		this.#socket.write("OK\n");
-	}
-	err(message?: string): void {
-		this.#socket.write(
-			message === undefined
-				? `Err\n`
-				: `Err ${message}\n`);
-	}
-	d(data: string): void {
-		this.#socket.write(`D ${data}\n`);
-	}
-	end(): void {
-		this.#socket.write("END\n");
-	}
-	comment(message: string): void {
-		this.#socket.write(`# ${message}\n`);
-	}
+function AssuanResponse(socket: net.Socket) {
+	return {
+		ok(): void {
+			socket.write("OK\n");
+		},
+		err(message?: string): void {
+			socket.write(
+				message === undefined
+					? `Err\n`
+					: `Err ${message}\n`);
+		},
+		d(data: string): void {
+			socket.write(`D ${data}\n`);
+		},
+		end(): void {
+			socket.write("END\n");
+		},
+		comment(message: string): void {
+			socket.write(`# ${message}\n`);
+		}
+	};
 }
 
 export function activate(_context: vscode.ExtensionContext) {
@@ -65,7 +55,7 @@ export function activate(_context: vscode.ExtensionContext) {
 	}
 	server = net.createServer((socket) => {
 		console.log('connected');
-		const res = new AssuanResponseImpl(socket);
+		const res = AssuanResponse(socket);
 		readline.createInterface(socket)
 			.on('line', async (input) => {
 				const [command, param] = parseCommand(input.trimStart());
