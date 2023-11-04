@@ -1,0 +1,2 @@
+#!/bin/sh
+exec socat stdin /run/user/1000/pinentry-vscode.sock
