@@ -1,28 +1,23 @@
 import * as vscode from 'vscode';
 import net from 'net';
 import fs from 'fs';
+import readline from 'node:readline';
 
 const sockFile = "/run/user/1000/pinentry-vscode.sock";
 
 let server!: net.Server;
 
-/** `"\nFIRST\nSECOND\n"` => `["FIRST", "\n", "SECOND", "\n"]` */
-function splitLine(input: string): string[] {
-	return input.split(/([\r\n]+)/).filter(line => line !== '');
-}
-
-function pickFirstLine(lines: string[]): [first: string, lines: string[]] {
-	const firstIndex = lines.findIndex(line => !/^[\r\n]/.test(line));
-	if (firstIndex === -1) {
-		return ["", []];
-	}
-	if (firstIndex + 1 === lines.length) {
-		return ["", lines.slice(firstIndex)];
-	}
-	return [lines[firstIndex], lines.slice(firstIndex + 1)];
-}
-
-function parseCommand(line: string): [command: string, param: string] {
+/**
+ * @example
+ * ```
+ * parseCommand("D foo bar")
+ * => ["D", "foo bar"]
+ * ```
+ */
+function parseCommand(line: string): [
+	command: string,
+	param: string
+] {
 	const m = line.match(/^([^ ]+)( (.*))?$/);
 	if (m === null) {
 		return ['', ''];
@@ -30,7 +25,7 @@ function parseCommand(line: string): [command: string, param: string] {
 	return [m[1], m[3] ?? ''];
 }
 
-interface Assuan {
+interface AssuanResponse {
 	ok(): void;
 	err(message?: string): void;
 	d(data: string): void;
@@ -38,27 +33,7 @@ interface Assuan {
 	comment(message: string): void;
 }
 
-class PinEntryServer {
-	async getPin(res: Assuan): Promise<void> {
-		const result = await vscode.window.showInputBox({
-			title: "Title",
-			prompt: "Prompt",
-			password: true,
-		});
-		if (result !== undefined) {
-			res.d(result);
-		}
-		res.end();
-	}
-	help(res: Assuan): void {
-		res.comment("GETPIN");
-		res.comment("HELP");
-		res.comment("BYE");
-		res.ok();
-	}
-}
-
-class AssuanImpl implements Assuan {
+class AssuanResponseImpl implements AssuanResponse {
 	#socket: net.Socket;
 	constructor(socket: net.Socket) {
 		this.#socket = socket;
@@ -70,7 +45,7 @@ class AssuanImpl implements Assuan {
 		this.#socket.write(
 			message === undefined
 				? `Err\n`
-				: `Err${message === undefined}`);
+				: `Err ${message}\n`);
 	}
 	d(data: string): void {
 		this.#socket.write(`D ${data}\n`);
@@ -85,45 +60,42 @@ class AssuanImpl implements Assuan {
 
 export function activate(_context: vscode.ExtensionContext) {
 	console.log("activate");
-	console.log(`xxx ${process.cwd()}`);
 	if (fs.existsSync(sockFile)) {
 		fs.unlinkSync(sockFile);
 	}
-	const pinEntry = new PinEntryServer();
 	server = net.createServer((socket) => {
 		console.log('connected');
-		const res = new AssuanImpl(socket);
-		let lines: string[] = [];
-		socket.on('data',
-			async (data) => {
-				if (data.length === 0) { return; }
-				lines = [
-					...lines,
-					...splitLine(data.toString()),
-				];
-				while (true) {
-					const [firstLine, nextLines] = pickFirstLine(lines);
-					lines = nextLines;
-					if (firstLine === '') {
+		const res = new AssuanResponseImpl(socket);
+		readline.createInterface(socket)
+			.on('line', async (input) => {
+				const [command, param] = parseCommand(input.trimStart());
+				switch (command) {
+					case "":
+					case "#":
 						break;
-					}
-					const [command, _param] = parseCommand(firstLine);
-					switch (command) {
-						case 'GETPIN':
-							pinEntry.getPin(res);
-							break;
-						case 'HELP':
-							pinEntry.help(res);
-							break;
-						case "#":
-							break;
-						case "BYE":
-							socket.end();
-							break;
-						default:
-							res.err(`Unexpected ${command}`);
-							break;
-					}
+					case 'GETPIN':
+						const result = await vscode.window.showInputBox({
+							title: "Title",
+							prompt: "Prompt",
+							password: true,
+						});
+						if (result !== undefined) {
+							res.d(result);
+						}
+						res.end();
+						break;
+					case 'HELP':
+						res.comment("GETPIN");
+						res.comment("HELP");
+						res.comment("BYE");
+						res.ok();
+						break;
+					case "BYE":
+						socket.end();
+						break;
+					default:
+						res.err(`Unexpected ${command}`);
+						break;
 				}
 			});
 		socket.on('close', () => {
@@ -134,7 +106,6 @@ export function activate(_context: vscode.ExtensionContext) {
 		console.log("listening");
 	});
 
-	// context.subscriptions.push({ dispose() { server.close() } });
 	console.log("finish activate");
 }
 
