@@ -92,6 +92,7 @@ export function activate(_context: vscode.ExtensionContext) {
 			console.log('closed');
 		});
 	});
+	server.maxConnections = 1;
 	server.listen(sockFile, () => {
 		console.log("listening");
 	});
