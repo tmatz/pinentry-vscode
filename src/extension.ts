@@ -27,8 +27,11 @@ function parseCommand(line: string): [
 
 function AssuanResponse(socket: net.Socket) {
 	return {
-		ok(): void {
-			socket.write("OK\n");
+		ok(message?: string): void {
+			socket.write(
+        message === undefined
+          ? "OK\n"
+          : `OK ${message}\n`);
 		},
 		err(message?: string): void {
 			socket.write(
@@ -56,6 +59,9 @@ export function activate(_context: vscode.ExtensionContext) {
 	server = net.createServer((socket) => {
 		console.log('connected');
 		const res = AssuanResponse(socket);
+    let description: string | undefined;
+    let prompt: string | undefined;
+    res.ok('Pleased to meet you');
 		readline.createInterface(socket)
 			.on('line', async (input) => {
 				const [command, param] = parseCommand(input.trimStart());
@@ -63,16 +69,32 @@ export function activate(_context: vscode.ExtensionContext) {
 					case "":
 					case "#":
 						break;
+					case 'OPTION':
+            res.comment('ignored');
+            res.ok();
+            break;
+					case 'SETKEYINFO':
+            res.comment('ignored');
+            res.ok();
+            break;
+          case 'SETDESC':
+            description = param;
+            res.ok();
+            break;
+          case 'SETPROMPT':
+            prompt = param;
+            res.ok();
+            break;
 					case 'GETPIN':
 						const result = await vscode.window.showInputBox({
-							title: "Title",
-							prompt: "Prompt",
+							title: description,
+							prompt,
 							password: true,
 						});
 						if (result !== undefined) {
 							res.d(result);
 						}
-						res.end();
+						res.ok();
 						break;
 					case 'HELP':
 						res.comment("GETPIN");
@@ -81,6 +103,7 @@ export function activate(_context: vscode.ExtensionContext) {
 						res.ok();
 						break;
 					case "BYE":
+						res.ok('closing connection');
 						socket.end();
 						break;
 					default:
