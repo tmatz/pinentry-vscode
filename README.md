@@ -2,70 +2,52 @@
 
 pinentry program for Visual Studio Code.
 
-## Features
+## Configuration
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### VSCode Setting
 
-For example if there is an image subfolder under your extension project workspace:
+Settings should be set for workspace.
 
-\!\[feature X\]\(images/feature-x.png\)
+- `pinentry-vscode.PINENTRY_VSCODE_SOCKET`: socket path that listens for password input requests.
+  - for example, `/run/user/1000/pinentry-vscode.sock`
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+This value should also be set as environment variable `PINENTRY_VSCODE_SOCKET` for terminal.
 
-## Requirements
+```json
+{
+  "settings": {
+    "terminal.integrated.env.linux": {
+      "PINENTRY_VSCODE_SOCKET": "/run/user/1000/pinentry-vscode.sock",
+```
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+### GPG Setting
 
-## Extension Settings
+Install `socat` program.
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+```bash
+sudo apt update
+sudo apt install socat
+```
 
-For example:
+Create shell script.
 
-This extension contributes the following settings:
+`/path/to/pinentry-vscode`
 
-- `myExtension.enable`: Enable/disable this extension.
-- `myExtension.thing`: Set to `blah` to do something.
+```bash
+#!/bin/sh
+if [ x"$PINENTRY_VSCODE_SOCKET" = x ]; then
+  echo "PINENTRY_VSCODE_SOCKET environment variable is not set" >&2
+  exit 1
+fi
+exec socat stdin "$PINENTRY_VSCODE_SOCKET"
+```
 
-## Known Issues
+```bash
+chmod +x /path/to/pinentry-vscode
+```
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+Then, add following line to `~/.gnupg/gpg-agent.conf`
 
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-- [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-- Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-- Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-- Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-- [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-- [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+```
+pinentry-program /path/to/pinentry-vscode
+```
