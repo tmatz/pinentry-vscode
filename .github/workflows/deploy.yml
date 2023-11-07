@@ -1,0 +1,34 @@
+name: Deploy
+on:
+  push:
+  release:
+    types: [published, prereleased]
+  workflow_dispatch:
+
+jobs:
+  upload-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install vsce
+        run: npm install -g vsce
+      - name: Install dependencies
+        run: npm ci
+      - name: Run build
+        run: vsce package
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: extension
+          path: "*.vsix"
+      - name: Upload release artifact
+        if: ${{ github.event_name == 'release' }}
+        uses: shogo82148/actions-upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: "*.vsix"
