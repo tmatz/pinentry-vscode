@@ -9,16 +9,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "pinentry-vscode.helloWorld",
-        "title": "Hello World"
-      }
-    ]
-  },
+  "contributes": {},
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
