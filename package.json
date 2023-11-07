@@ -13,7 +13,19 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "title": "pinentry-vscode",
+      "properties": {
+        "pinentry-vscode.PINENTRY_VSCODE_SOCKET": {
+          "scope": "window",
+          "type": "string",
+          "default": "",
+          "description": "A socket that listens for password input requests. This value should also be set as environment variable 'PINENTRY_VSCODE_SOCKET' for terminal."
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

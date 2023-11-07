@@ -3,9 +3,7 @@ import net from "net";
 import fs from "fs";
 import readline from "node:readline";
 
-const sockFile = "/run/user/1000/pinentry-vscode.sock";
-
-let server!: net.Server;
+let server: net.Server | undefined;
 
 /**
  * @example
@@ -44,8 +42,15 @@ function AssuanResponse(socket: net.Socket) {
 
 export function activate(_context: vscode.ExtensionContext) {
   console.log("activate");
-  if (fs.existsSync(sockFile)) {
-    fs.unlinkSync(sockFile);
+
+  const config = vscode.workspace.getConfiguration("pinentry-vscode");
+  const socketPath = config.get<string>("PINENTRY_VSCODE_SOCKET");
+  if (socketPath === undefined) {
+    console.log(`pinentry-vscode.PINENTRY_VSCODE_SOCKET is not set. inactive.`);
+    return;
+  }
+  if (fs.existsSync(socketPath)) {
+    fs.unlinkSync(socketPath);
   }
   server = net.createServer((socket) => {
     console.log("connected");
@@ -106,7 +111,7 @@ export function activate(_context: vscode.ExtensionContext) {
     });
   });
   server.maxConnections = 1;
-  server.listen(sockFile, () => {
+  server.listen(socketPath, () => {
     console.log("listening");
   });
 
@@ -115,6 +120,7 @@ export function activate(_context: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log("start deactivate");
-  server.close();
+  server?.close();
+  server = undefined;
   console.log("finish deactivate");
 }
