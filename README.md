@@ -39,7 +39,7 @@ if [ x"$PINENTRY_VSCODE_SOCKET" = x ]; then
   echo "PINENTRY_VSCODE_SOCKET environment variable is not set" >&2
   exit 1
 fi
-exec socat stdin "$PINENTRY_VSCODE_SOCKET"
+exec socat stdio "$PINENTRY_VSCODE_SOCKET"
 ```
 
 ```bash
