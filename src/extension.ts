@@ -17,25 +17,44 @@ function parseCommand(line: string): [command: string, param: string] {
   if (m === null) {
     return ["", ""];
   }
-  return [m[1], m[3] ?? ""];
+  const command = m[1];
+  const param = m[3] ?? "";
+  return [command, decodeAssuanString(param)];
+}
+
+function encodeAssuanString(str: string): string {
+  return str.replaceAll(
+    /\r\n%/g,
+    (str) => `%${str.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
+  );
+}
+
+function decodeAssuanString(str: string): string {
+  return str.replaceAll(/%([0-9A-F]{2})/g, (_, code) =>
+    String.fromCharCode(Number.parseInt(code, 16))
+  );
 }
 
 function AssuanResponse(socket: net.Socket) {
   return {
     ok(message?: string): void {
-      socket.write(message === undefined ? "OK\n" : `OK ${message}\n`);
+      socket.write(
+        message === undefined ? "OK\n" : `OK ${encodeAssuanString(message)}\n`
+      );
     },
     err(message?: string): void {
-      socket.write(message === undefined ? `Err\n` : `Err ${message}\n`);
+      socket.write(
+        message === undefined ? `Err\n` : `Err ${encodeAssuanString(message)}\n`
+      );
     },
     d(data: string): void {
-      socket.write(`D ${data}\n`);
+      socket.write(`D ${encodeAssuanString(data)}\n`);
     },
     end(): void {
       socket.write("END\n");
     },
     comment(message: string): void {
-      socket.write(`# ${message}\n`);
+      socket.write(`# ${encodeAssuanString(message)}\n`);
     },
   };
 }
