@@ -130,7 +130,7 @@ export function activate(_context: vscode.ExtensionContext) {
     });
   });
   server.maxConnections = 1;
-  server.listen(socketPath, () => {
+  server.listen({ path: socketPath, exclusive: true }, () => {
     console.log("listening");
   });
 
