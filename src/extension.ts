@@ -152,9 +152,9 @@ async function startServer(socketPath: string) {
         log("socket ended");
         rl.close();
       });
-      socket.on("close", async () => {
+      socket.on("close", () => {
         log("socket closed");
-        intervalId = setInterval(() => {
+        intervalId = setInterval(async () => {
           if (!fs.existsSync(socketPath)) {
             log("socket file lost. server restarting...");
             if (intervalId !== null) {
