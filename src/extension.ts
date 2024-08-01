@@ -3,7 +3,14 @@ import net from "net";
 import fs from "fs";
 import readline from "node:readline";
 
-let server: net.Server | undefined;
+const channel = vscode.window.createOutputChannel("pinentry-vscode");
+
+let server: net.Server | null = null;
+let lastSocketPath: string | null = null;
+
+function log(message: string): void {
+  channel.appendLine(`${new Date().toLocaleString()}: ${message}`);
+}
 
 /**
  * @example
@@ -60,86 +67,164 @@ function AssuanResponse(socket: net.Socket) {
 }
 
 export function activate(_context: vscode.ExtensionContext) {
-  console.log("activate");
-
-  const config = vscode.workspace.getConfiguration("pinentry-vscode");
-  const socketPath = config.get<string>("PINENTRY_VSCODE_SOCKET");
-  if (socketPath === undefined) {
-    console.log(`pinentry-vscode.PINENTRY_VSCODE_SOCKET is not set. inactive.`);
-    return;
-  }
-  if (fs.existsSync(socketPath)) {
-    fs.unlinkSync(socketPath);
-  }
-  server = net.createServer((socket) => {
-    console.log("connected");
-    const res = AssuanResponse(socket);
-    let description: string | undefined;
-    let prompt: string | undefined;
-    res.ok("Pleased to meet you");
-    readline.createInterface(socket).on("line", async (input) => {
-      const [command, param] = parseCommand(input.trimStart());
-      switch (command) {
-        case "":
-        case "#":
-          break;
-        case "OPTION":
-          res.comment("ignored");
-          res.ok();
-          break;
-        case "SETKEYINFO":
-          res.comment("ignored");
-          res.ok();
-          break;
-        case "SETDESC":
-          description = param;
-          res.ok();
-          break;
-        case "SETPROMPT":
-          prompt = param;
-          res.ok();
-          break;
-        case "GETPIN":
-          const result = await vscode.window.showInputBox({
-            title: description,
-            prompt,
-            password: true,
-          });
-          if (result !== undefined) {
-            res.d(result);
-          }
-          res.ok();
-          break;
-        case "HELP":
-          res.comment("GETPIN");
-          res.comment("HELP");
-          res.comment("BYE");
-          res.ok();
-          break;
-        case "BYE":
-          res.ok("closing connection");
-          socket.end();
-          break;
-        default:
-          res.err(`Unexpected ${command}`);
-          break;
-      }
-    });
-    socket.on("close", () => {
-      console.log("closed");
-    });
+  log("start activate");
+  vscode.workspace.onDidChangeConfiguration((event) => {
+    if (event.affectsConfiguration("pinentry-vscode.enabled")) {
+      startStopServer();
+    }
   });
-  server.maxConnections = 1;
-  server.listen({ path: socketPath, exclusive: true }, () => {
-    console.log("listening");
-  });
-
-  console.log("finish activate");
+  startStopServer();
+  log("finish activate");
 }
 
 export function deactivate() {
-  console.log("start deactivate");
-  server?.close();
-  server = undefined;
-  console.log("finish deactivate");
+  log("start deactivate");
+  stopServer();
+  log("finish deactivate");
+}
+
+async function startServer(socketPath: string) {
+  log(`pinentry-vscode starting server...`);
+  try {
+    lastSocketPath = socketPath;
+    if (fs.existsSync(socketPath)) {
+      log(`remove socket.`);
+      await fs.promises.unlink(socketPath);
+    }
+    let intervalId: ReturnType<typeof setInterval>| null = null;
+    server = net.createServer((socket) => {
+      log("connected");
+      const res = AssuanResponse(socket);
+      let description: string | undefined;
+      let prompt: string | undefined;
+      res.ok("Pleased to meet you");
+      const rl = readline.createInterface(socket);
+      rl.on("line", async (input) => {
+        const [command, param] = parseCommand(input.trimStart());
+        log(`pinentry-vscode command: ${command}`);
+        switch (command) {
+          case "":
+          case "#":
+            break;
+          case "OPTION":
+            res.comment("ignored");
+            res.ok();
+            break;
+          case "SETKEYINFO":
+            res.comment("ignored");
+            res.ok();
+            break;
+          case "SETDESC":
+            description = param;
+            res.ok();
+            break;
+          case "SETPROMPT":
+            prompt = param;
+            res.ok();
+            break;
+          case "GETPIN":
+            const result = await vscode.window.showInputBox({
+              title: description,
+              prompt,
+              password: true,
+            });
+            if (result !== undefined) {
+              res.d(result);
+            }
+            res.ok();
+            break;
+          case "HELP":
+            res.comment("GETPIN");
+            res.comment("HELP");
+            res.comment("BYE");
+            res.ok();
+            break;
+          case "BYE":
+            res.ok("closing connection");
+            socket.end();
+            break;
+          default:
+            res.err(`Unexpected ${command}`);
+            break;
+        }
+      });
+      socket.on('end', () => {
+        log("socket ended");
+        rl.close();
+      });
+      socket.on("close", async () => {
+        log("socket closed");
+        intervalId = setInterval(() => {
+          if (!fs.existsSync(socketPath)) {
+            log("socket file lost. server restarting...");
+            if (intervalId !== null) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+            await stopServer();
+            await startServer(socketPath);
+          }
+        }, 1000);
+      });
+    });
+    server.on("close", () => {
+      log("server closed");
+      server = null;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      if (fs.existsSync(socketPath)) {
+        log(`remove socket.`);
+        fs.unlinkSync(socketPath);
+      }
+      setTimeout(startStopServer, 1000);
+    });
+    server.on("error", (err) => {
+      log(`error ${err}`);
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    });
+    server.maxConnections = 1;
+    server.listen({ path: socketPath, exclusive: true }, () => {
+      log("listening");
+    });
+  } catch (error) {
+    log(`pinentry-vscode error: ${error}`);
+    await stopServer();
+  }
+}
+
+async function stopServer() {
+  const lastServer = server;
+  server = null;
+  lastSocketPath = null;
+  if (lastServer !== null) {
+    log(`pinentry-vscode stopping server.`);
+    await new Promise(resolve => lastServer.close(resolve));
+  }
+}
+
+async function startStopServer() {
+  const config = vscode.workspace.getConfiguration("pinentry-vscode");
+  const isEnabled = config.get<boolean>("enabled");
+  if (isEnabled) {
+    log(`pinentry-vscode is enabled.`);
+    const socketPath = config.get<string>("PINENTRY_VSCODE_SOCKET");
+    if (server !== null && socketPath === lastSocketPath) {
+      // already started
+    } else if (!socketPath) {
+      await stopServer();
+      log(`pinentry-vscode.PINENTRY_VSCODE_SOCKET is not set. inactive.`);
+    } else {
+      await startServer(socketPath);
+    }
+  } else {
+    log(`pinentry-vscode is disabled.`);
+    if (server !== null) {
+      await stopServer();
+    }
+  }
 }

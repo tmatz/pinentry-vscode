@@ -1,6 +1,7 @@
 {
   "name": "pinentry-vscode",
   "displayName": "pinentry-vscode",
+  "publisher": "tmatz",
   "description": "pinentry program for Visual Studio Code",
   "author": {
     "name": "MATSUDA Takashi"
@@ -9,7 +10,7 @@
     "type": "git",
     "url": "https://github.com/tmatz/pinentry-vscode.git"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.84.0"
   },
@@ -24,6 +25,11 @@
     "configuration": {
       "title": "pinentry-vscode",
       "properties": {
+        "pinentry-vscode.enabled": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": "true"
+        },
         "pinentry-vscode.PINENTRY_VSCODE_SOCKET": {
           "scope": "window",
           "type": "string",
