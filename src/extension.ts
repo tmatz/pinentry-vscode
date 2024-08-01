@@ -94,6 +94,10 @@ async function startServer(socketPath: string) {
     let intervalId: ReturnType<typeof setInterval>| null = null;
     server = net.createServer((socket) => {
       log("connected");
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
       const res = AssuanResponse(socket);
       let description: string | undefined;
       let prompt: string | undefined;
@@ -190,6 +194,17 @@ async function startServer(socketPath: string) {
     server.maxConnections = 1;
     server.listen({ path: socketPath, exclusive: true }, () => {
       log("listening");
+      intervalId = setInterval(async () => {
+        if (!fs.existsSync(socketPath)) {
+          log("socket file lost. server restarting...");
+          if (intervalId !== null) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+          await stopServer();
+          await startServer(socketPath);
+        }
+      }, 1000);
     });
   } catch (error) {
     log(`pinentry-vscode error: ${error}`);
