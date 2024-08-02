@@ -4,12 +4,14 @@ import fs from "fs";
 import readline from "node:readline";
 
 const channel = vscode.window.createOutputChannel("pinentry-vscode");
+const stopCommand = "__stop_server__";
 
 let server: net.Server | null = null;
-let lastSocketPath: string | null = null;
 
+// const sessionId = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
 function log(message: string): void {
   channel.appendLine(`${new Date().toLocaleString()}: ${message}`);
+  // fs.appendFileSync("/tmp/pinentry-vscode.txt", `${sessionId}:${new Date().toLocaleString()}: ${message}\n`);
 }
 
 /**
@@ -66,46 +68,57 @@ function AssuanResponse(socket: net.Socket) {
   };
 }
 
-export function activate(_context: vscode.ExtensionContext) {
+export async function activate(_context: vscode.ExtensionContext) {
   log("start activate");
   vscode.workspace.onDidChangeConfiguration((event) => {
     if (event.affectsConfiguration("pinentry-vscode.enabled")) {
       startStopServer();
     }
   });
-  startStopServer();
+  await startStopServer();
   log("finish activate");
 }
 
-export function deactivate() {
+export async function deactivate() {
   log("start deactivate");
-  stopServer();
+  await stopServer();
   log("finish deactivate");
 }
 
 async function startServer(socketPath: string) {
-  log(`pinentry-vscode starting server...`);
+  log(`starting server...`);
   try {
-    lastSocketPath = socketPath;
     if (fs.existsSync(socketPath)) {
-      log(`remove socket.`);
-      await fs.promises.unlink(socketPath);
+      log(`stop old server`);
+      try {
+        const client = net.createConnection(socketPath);
+        client.write(stopCommand);
+        client.end();
+        await delay(1000);
+        if (fs.existsSync(socketPath)) {
+          log(`failed stop old server`);
+          return;
+        }
+      } catch {
+        log(`unlink socket file forcefully`);
+        fs.unlinkSync(socketPath);
+      }
     }
-    let intervalId: ReturnType<typeof setInterval>| null = null;
     server = net.createServer((socket) => {
       log("connected");
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
       const res = AssuanResponse(socket);
       let description: string | undefined;
       let prompt: string | undefined;
       res.ok("Pleased to meet you");
       const rl = readline.createInterface(socket);
       rl.on("line", async (input) => {
+        if (input === stopCommand) {
+          log(`stop_server command received`);
+          server?.close();
+          return;
+        }
         const [command, param] = parseCommand(input.trimStart());
-        log(`pinentry-vscode command: ${command}`);
+        log(`assuan command: ${command}`);
         switch (command) {
           case "":
           case "#":
@@ -158,88 +171,51 @@ async function startServer(socketPath: string) {
       });
       socket.on("close", () => {
         log("socket closed");
-        intervalId = setInterval(async () => {
-          if (!fs.existsSync(socketPath)) {
-            log("socket file lost. server restarting...");
-            if (intervalId !== null) {
-              clearInterval(intervalId);
-              intervalId = null;
-            }
-            await stopServer();
-            await startServer(socketPath);
-          }
-        }, 1000);
       });
     });
     server.on("close", () => {
       log("server closed");
+      fs.unlinkSync(socketPath);
       server = null;
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-      if (fs.existsSync(socketPath)) {
-        log(`remove socket.`);
-        fs.unlinkSync(socketPath);
-      }
-      setTimeout(startStopServer, 1000);
     });
     server.on("error", (err) => {
       log(`error ${err}`);
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
     });
     server.maxConnections = 1;
     server.listen({ path: socketPath, exclusive: true }, () => {
       log("listening");
-      intervalId = setInterval(async () => {
-        if (!fs.existsSync(socketPath)) {
-          log("socket file lost. server restarting...");
-          if (intervalId !== null) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
-          await stopServer();
-          await startServer(socketPath);
-        }
-      }, 1000);
     });
   } catch (error) {
-    log(`pinentry-vscode error: ${error}`);
-    await stopServer();
+    log(`error: ${error}`);
+    server = null;
   }
 }
 
 async function stopServer() {
-  const lastServer = server;
-  server = null;
-  lastSocketPath = null;
-  if (lastServer !== null) {
-    log(`pinentry-vscode stopping server.`);
-    await new Promise(resolve => lastServer.close(resolve));
+  const _server = server;
+  if (_server !== null) {
+    log(`stopping server.`);
+    await new Promise(resolve => _server.close(resolve));
   }
 }
 
 async function startStopServer() {
+  await stopServer();
   const config = vscode.workspace.getConfiguration("pinentry-vscode");
   const isEnabled = config.get<boolean>("enabled");
-  if (isEnabled) {
-    log(`pinentry-vscode is enabled.`);
-    const socketPath = config.get<string>("PINENTRY_VSCODE_SOCKET");
-    if (server !== null && socketPath === lastSocketPath) {
-      // already started
-    } else if (!socketPath) {
-      await stopServer();
-      log(`pinentry-vscode.PINENTRY_VSCODE_SOCKET is not set. inactive.`);
-    } else {
-      await startServer(socketPath);
-    }
-  } else {
+  if (!isEnabled) {
     log(`pinentry-vscode is disabled.`);
-    if (server !== null) {
-      await stopServer();
-    }
+    return;
   }
+  log(`pinentry-vscode is enabled.`);
+  const socketPath = config.get<string>("PINENTRY_VSCODE_SOCKET");
+  if (!socketPath) {
+    log(`pinentry-vscode.PINENTRY_VSCODE_SOCKET is not set. inactive.`);
+    return;
+  }
+  await startServer(socketPath);
+}
+
+function delay(msec: number): Promise<void> {
+  return new Promise<void>(resolve => setTimeout(() => resolve(), msec));
 }
