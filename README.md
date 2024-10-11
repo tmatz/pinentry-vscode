@@ -11,7 +11,7 @@ Settings should be set for workspace.
 - `pinentry-vscode.PINENTRY_VSCODE_SOCKET`: socket path that listens for password input requests.
   - for example, `/run/user/1000/pinentry-vscode.sock`
 
-### GPG Setting
+### GPG Agent Setting
 
 Install `socat` program.
 
