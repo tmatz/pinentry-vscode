@@ -22,8 +22,13 @@ sudo apt install socat
 
 Create shell script.
 
+`/path/to/pinentry-vscode`
 ```bash
-echo exec /user/bin/socat stdio unix-connect:/run/user/1000/pinentry-vscode.sock > /path/to/pinentry-vscode
+#!/bin/sh
+exec /user/bin/socat stdio unix-connect:/run/user/1000/pinentry-vscode.sock
+```
+
+```bash
 chmod +x /path/to/pinentry-vscode
 ```
 
