@@ -25,7 +25,7 @@ Create shell script.
 `/path/to/pinentry-vscode`
 ```bash
 #!/bin/sh
-exec /user/bin/socat stdio unix-connect:/run/user/1000/pinentry-vscode.sock
+exec /usr/bin/socat stdio unix-connect:/run/user/1000/pinentry-vscode.sock
 ```
 
 ```bash
